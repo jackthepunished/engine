@@ -1,4 +1,4 @@
-// Basic 3D shader with lighting
+// Basic 3D shader with lighting and material support
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -33,9 +33,18 @@ struct LightUniform {
     _padding3: f32,
 }
 
+struct MaterialUniform {
+    color: vec3<f32>,
+    _padding1: f32,
+    specular: f32,
+    shininess: f32,
+    _padding2: vec2<f32>,
+}
+
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
 @group(1) @binding(0) var<uniform> model: ModelUniform;
 @group(2) @binding(0) var<uniform> light: LightUniform;
+@group(3) @binding(0) var<uniform> material: MaterialUniform;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -52,10 +61,10 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Material properties
-    let object_color = vec3<f32>(0.8, 0.8, 0.8);
-    let specular_strength = 0.5;
-    let shininess = 32.0;
+    // Use material properties
+    let object_color = material.color;
+    let specular_strength = material.specular;
+    let shininess = material.shininess;
 
     // Ambient
     let ambient = light.ambient * object_color;
