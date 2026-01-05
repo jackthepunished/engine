@@ -684,6 +684,7 @@ dependencies = [
  "log",
  "pollster",
  "rapier3d",
+ "smallvec",
  "wgpu",
  "winit",
 ]
