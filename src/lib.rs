@@ -7,7 +7,9 @@
 //! - Input handling with winit
 //! - Audio playback with rodio
 //! - Skeletal animation system
+//! - AI and navigation
 
+pub mod ai;
 pub mod animation;
 pub mod assets;
 pub mod audio;
