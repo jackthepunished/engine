@@ -59,12 +59,11 @@ impl<T: Send + Sync + 'static> Assets<T> {
         let path = path.as_ref().to_path_buf();
 
         // Check if already loaded
-        if let Some(&id) = self.path_to_id.get(&path) {
-            if let Some(entry) = self.assets.get(&id) {
-                if let Some(handle) = entry.data.downcast_ref::<AssetHandle<T>>() {
-                    return handle.clone();
-                }
-            }
+        if let Some(&id) = self.path_to_id.get(&path)
+            && let Some(entry) = self.assets.get(&id)
+            && let Some(handle) = entry.data.downcast_ref::<AssetHandle<T>>()
+        {
+            return handle.clone();
         }
 
         let handle = AssetHandle::new(asset);
