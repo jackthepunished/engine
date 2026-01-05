@@ -1,0 +1,30 @@
+//! A 3D Game Engine built in Rust
+//!
+//! This engine provides:
+//! - 3D rendering with wgpu
+//! - Entity Component System (ECS) architecture
+//! - Physics simulation with rapier3d
+//! - Input handling with winit
+
+pub mod core;
+pub mod ecs;
+pub mod input;
+pub mod physics;
+pub mod renderer;
+
+// Re-exports for convenience
+pub use glam;
+pub use hecs;
+pub use rapier3d;
+pub use wgpu;
+pub use winit;
+
+/// Prelude module for common imports
+pub mod prelude {
+    pub use crate::core::{Engine, EngineConfig};
+    pub use crate::ecs::{Transform, World};
+    pub use crate::input::Input;
+    pub use crate::physics::Physics;
+    pub use crate::renderer::{Camera, Mesh, Renderer};
+    pub use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
+}
