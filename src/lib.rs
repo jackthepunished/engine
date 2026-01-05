@@ -6,7 +6,9 @@
 //! - Physics simulation with rapier3d
 //! - Input handling with winit
 //! - Audio playback with rodio
+//! - Skeletal animation system
 
+pub mod animation;
 pub mod assets;
 pub mod audio;
 pub mod core;
