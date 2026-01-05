@@ -8,6 +8,7 @@
 //! - Audio playback with rodio
 //! - Skeletal animation system
 //! - AI and navigation
+//! - UI widgets and layout
 
 pub mod ai;
 pub mod animation;
@@ -18,6 +19,7 @@ pub mod ecs;
 pub mod input;
 pub mod physics;
 pub mod renderer;
+pub mod ui;
 
 // Re-exports for convenience
 pub use glam;
