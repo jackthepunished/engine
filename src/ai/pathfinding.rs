@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
 use glam::Vec2;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// A 2D navigation grid
 #[derive(Debug, Clone)]
@@ -183,6 +183,7 @@ pub fn find_path(grid: &Grid, start: Vec2, goal: Vec2) -> PathResult {
     let mut open_set = BinaryHeap::new();
     let mut came_from: FxHashMap<(usize, usize), (usize, usize)> = FxHashMap::default();
     let mut g_score: FxHashMap<(usize, usize), f32> = FxHashMap::default();
+    let mut closed: FxHashSet<(usize, usize)> = FxHashSet::default();
 
     let heuristic = |x: usize, y: usize| -> f32 {
         let dx = (x as f32 - goal_x as f32).abs();
@@ -199,6 +200,12 @@ pub fn find_path(grid: &Grid, start: Vec2, goal: Vec2) -> PathResult {
     });
 
     while let Some(current) = open_set.pop() {
+        // Skip already processed nodes
+        if closed.contains(&(current.x, current.y)) {
+            continue;
+        }
+        closed.insert((current.x, current.y));
+
         if current.x == goal_x && current.y == goal_y {
             // Reconstruct path
             let mut path = vec![(goal_x, goal_y)];

@@ -228,10 +228,10 @@ impl ParticleEmitter {
             let start = self.config.start_color;
             let end = self.config.end_color;
             particle.color = [
-                start.x + (end.x - start.x) * t,
-                start.y + (end.y - start.y) * t,
-                start.z + (end.z - start.z) * t,
-                start.w + (end.w - start.w) * t,
+                lerp(start.x, end.x, t),
+                lerp(start.y, end.y, t),
+                lerp(start.z, end.z, t),
+                lerp(start.w, end.w, t),
             ];
 
             // Keep if still alive

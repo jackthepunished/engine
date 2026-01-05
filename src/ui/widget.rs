@@ -72,6 +72,21 @@ impl Button {
         self.clicked = false;
         result
     }
+
+    /// Disable or enable the button
+    pub fn set_disabled(&mut self, disabled: bool) {
+        self.state = if disabled {
+            WidgetState::Disabled
+        } else {
+            WidgetState::Normal
+        };
+    }
+
+    /// Check if button is disabled
+    #[must_use]
+    pub fn is_disabled(&self) -> bool {
+        self.state == WidgetState::Disabled
+    }
 }
 
 impl Widget for Button {

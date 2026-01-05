@@ -55,7 +55,7 @@ impl AudioSource {
 
         Ok(Self {
             sink,
-            state: PlaybackState::Stopped,
+            state: PlaybackState::Paused,
             looping: false,
             name,
         })
@@ -76,7 +76,7 @@ impl AudioSource {
 
         Ok(Self {
             sink,
-            state: PlaybackState::Stopped,
+            state: PlaybackState::Paused,
             looping: false,
             name: name.into(),
         })

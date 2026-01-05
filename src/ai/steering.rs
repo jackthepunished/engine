@@ -204,7 +204,12 @@ impl Wander {
 impl SteeringBehavior for Wander {
     fn calculate(&self, position: Vec3, velocity: Vec3) -> SteeringOutput {
         // Project wander circle in front of agent
-        let forward = velocity.normalize_or_zero();
+        // Use default forward direction when stationary to avoid zero steering
+        let forward = if velocity.length_squared() > 0.0001 {
+            velocity.normalize()
+        } else {
+            Vec3::X // Default forward when stationary
+        };
         let center = position + forward * self.offset;
 
         // Calculate target on wander circle
