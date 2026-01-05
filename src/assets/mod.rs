@@ -1,12 +1,14 @@
-//! Asset and resource management system
+//! Asset management system
 //!
-//! Provides handle-based resource management with:
-//! - Type-safe asset handles
-//! - Centralized asset storage
-//! - Reference counting for automatic cleanup
+//! Provides handle-based asset loading and storage.
 
+mod gltf;
 mod handle;
 mod storage;
 
+pub use self::gltf::{
+    GltfError, GltfResult, LoadedGltf, LoadedMaterial, LoadedMesh, LoadedNode, LoadedPrimitive,
+    load_gltf,
+};
 pub use handle::{AssetHandle, WeakAssetHandle};
 pub use storage::{AssetServer, Assets};
