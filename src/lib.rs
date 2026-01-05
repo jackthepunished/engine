@@ -5,13 +5,21 @@
 //! - Entity Component System (ECS) architecture
 //! - Physics simulation with rapier3d
 //! - Input handling with winit
+//! - Audio playback with rodio
+//! - Skeletal animation system
+//! - AI and navigation
+//! - UI widgets and layout
 
+pub mod ai;
+pub mod animation;
 pub mod assets;
+pub mod audio;
 pub mod core;
 pub mod ecs;
 pub mod input;
 pub mod physics;
 pub mod renderer;
+pub mod ui;
 
 // Re-exports for convenience
 pub use glam;
