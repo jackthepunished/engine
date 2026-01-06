@@ -482,6 +482,7 @@ mod tests {
     // Test command with simple state
     #[derive(Debug)]
     struct TestCommand {
+        #[allow(dead_code)]
         value: i32,
         executed: bool,
     }
