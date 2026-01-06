@@ -55,13 +55,27 @@ impl PoolIndex {
 // Pool Slot
 // ============================================================================
 
-/// Internal slot state for pool entries.
+// ============================================================================
+// Pool Slot
+// ============================================================================
+
+/// Status of a pool slot.
 #[derive(Debug)]
-enum Slot<T> {
-    /// Slot contains an active object
-    Occupied(T),
-    /// Slot is empty and points to next free slot (or usize::MAX if end of list)
+enum SlotState {
+    /// Slot is actively used
+    Occupied,
+    /// Slot is available for reuse, pointing to next free slot
     Vacant(usize),
+}
+
+/// Internal slot storage.
+///
+/// Keeps the object instance alive even when vacant, allowing for memory reuse
+/// (e.g. avoiding buffer reallocations) via `acquire_with_reset`.
+#[derive(Debug)]
+struct Slot<T> {
+    value: T,
+    state: SlotState,
 }
 
 // ============================================================================
@@ -84,12 +98,13 @@ enum Slot<T> {
 ///
 /// # Memory Layout
 ///
-/// Objects are stored in a `Vec<Slot<T>>` where each slot is either:
-/// - `Occupied(T)` - contains an active object
-/// - `Vacant(next)` - links to next free slot in the free list
+/// Objects are stored in a `Vec<Slot<T>>`. Unlike traditional pools that might
+/// drop objects on release, this pool keeps the memory (and the `T` instance)
+/// alive in "Vacant" slots. This allows `acquire_with_reset` to reuse allocated
+/// resources (like vectors inside `T`) without dropping and reallocating them.
 #[derive(Debug)]
 pub struct Pool<T> {
-    /// Storage for all slots (occupied or vacant)
+    /// Storage for all slots
     slots: Vec<Slot<T>>,
     /// Head of the free list (index of first free slot, or usize::MAX if none)
     free_head: usize,
@@ -129,12 +144,15 @@ impl<T> Pool<T> {
 
     /// Acquire an object from the pool.
     ///
-    /// If a free slot exists, it will be reused. Otherwise, a new slot
-    /// is allocated and initialized using the provided function.
+    /// If a free slot exists, it will be reused. The existing object in that slot
+    /// is **replaced** (overwritten) by the new one created by `init`.
+    ///
+    /// If you want to reuse the internal memory of the existing object (e.g. reusing
+    /// a Vec's capacity), use `acquire_with_reset` instead.
     ///
     /// # Arguments
     ///
-    /// * `init` - Function to create a new object if no free slots exist
+    /// * `init` - Function to create a new object
     ///
     /// # Returns
     ///
@@ -145,33 +163,41 @@ impl<T> Pool<T> {
         if self.free_head != Self::NONE {
             // Reuse a free slot
             let index = self.free_head;
+            let slot = &mut self.slots[index];
 
             // Update free list head
-            if let Slot::Vacant(next) = self.slots[index] {
+            if let SlotState::Vacant(next) = slot.state {
                 self.free_head = next;
+            } else {
+                // Should be unreachable if logic is correct
+                self.free_head = Self::NONE;
             }
 
-            // Mark as occupied (caller must reinitialize the data)
-            self.slots[index] = Slot::Occupied(init());
+            // Overwrite object and mark active
+            slot.value = init();
+            slot.state = SlotState::Occupied;
 
             PoolIndex(index)
         } else {
             // Allocate new slot
             let index = self.slots.len();
-            self.slots.push(Slot::Occupied(init()));
+            self.slots.push(Slot {
+                value: init(),
+                state: SlotState::Occupied,
+            });
             PoolIndex(index)
         }
     }
 
-    /// Acquire an object, reinitializing an existing one if available.
+    /// Acquire an object, reusing the existing one if available.
     ///
-    /// This variant allows you to reset an existing object instead of
-    /// creating a new one, which can be more efficient for complex types.
+    /// This variant resets the existing object in a free slot using `reset`.
+    /// If no free slot exists, `init` is called to create a new one.
     ///
     /// # Arguments
     ///
-    /// * `init` - Function to create a brand new object
-    /// * `reset` - Function to reset an existing object for reuse
+    /// * `init` - Create brand new object (if pool needs to grow)
+    /// * `reset` - Reset existing object (if reusing a slot)
     ///
     /// # Returns
     ///
@@ -184,26 +210,29 @@ impl<T> Pool<T> {
         self.active_count += 1;
 
         if self.free_head != Self::NONE {
+            // Reuse existing slot
             let index = self.free_head;
+            let slot = &mut self.slots[index];
 
-            // Get the next free slot before we modify this one
-            let next_free = if let Slot::Vacant(next) = self.slots[index] {
-                next
+            // Update free list
+            if let SlotState::Vacant(next) = slot.state {
+                self.free_head = next;
             } else {
-                Self::NONE
-            };
+                self.free_head = Self::NONE;
+            }
 
-            self.free_head = next_free;
-
-            // Create new object but allow reset to modify it
-            let mut obj = init();
-            reset(&mut obj);
-            self.slots[index] = Slot::Occupied(obj);
+            // Reset existing object and mark active
+            reset(&mut slot.value);
+            slot.state = SlotState::Occupied;
 
             PoolIndex(index)
         } else {
+            // Grow pool
             let index = self.slots.len();
-            self.slots.push(Slot::Occupied(init()));
+            self.slots.push(Slot {
+                value: init(),
+                state: SlotState::Occupied,
+            });
             PoolIndex(index)
         }
     }
@@ -211,7 +240,8 @@ impl<T> Pool<T> {
     /// Release an object back to the pool.
     ///
     /// The slot becomes available for future `acquire` calls.
-    /// The object data is dropped immediately.
+    /// The object data is **preserved** in the slot (not dropped), allowing
+    /// future reuse via `acquire_with_reset`.
     ///
     /// # Arguments
     ///
@@ -227,13 +257,15 @@ impl<T> Pool<T> {
             return false;
         }
 
+        let slot = &mut self.slots[idx];
+
         // Check if already vacant
-        if matches!(self.slots[idx], Slot::Vacant(_)) {
+        if let SlotState::Vacant(_) = slot.state {
             return false;
         }
 
         // Add to free list
-        self.slots[idx] = Slot::Vacant(self.free_head);
+        slot.state = SlotState::Vacant(self.free_head);
         self.free_head = idx;
         self.active_count -= 1;
 
@@ -246,9 +278,9 @@ impl<T> Pool<T> {
     #[must_use]
     #[inline]
     pub fn get(&self, index: PoolIndex) -> Option<&T> {
-        self.slots.get(index.0).and_then(|slot| match slot {
-            Slot::Occupied(obj) => Some(obj),
-            Slot::Vacant(_) => None,
+        self.slots.get(index.0).and_then(|slot| match slot.state {
+            SlotState::Occupied => Some(&slot.value),
+            SlotState::Vacant(_) => None,
         })
     }
 
@@ -257,10 +289,12 @@ impl<T> Pool<T> {
     /// Returns `None` if the index is invalid or the slot is vacant.
     #[inline]
     pub fn get_mut(&mut self, index: PoolIndex) -> Option<&mut T> {
-        self.slots.get_mut(index.0).and_then(|slot| match slot {
-            Slot::Occupied(obj) => Some(obj),
-            Slot::Vacant(_) => None,
-        })
+        self.slots
+            .get_mut(index.0)
+            .and_then(|slot| match slot.state {
+                SlotState::Occupied => Some(&mut slot.value),
+                SlotState::Vacant(_) => None,
+            })
     }
 
     /// Check if an index refers to an active object.
@@ -269,7 +303,7 @@ impl<T> Pool<T> {
     pub fn is_active(&self, index: PoolIndex) -> bool {
         self.slots
             .get(index.0)
-            .is_some_and(|slot| matches!(slot, Slot::Occupied(_)))
+            .is_some_and(|slot| matches!(slot.state, SlotState::Occupied))
     }
 
     /// Get the number of currently active objects.
@@ -297,17 +331,17 @@ impl<T> Pool<T> {
     ///
     /// The iterator yields references to active objects only.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.slots.iter().filter_map(|slot| match slot {
-            Slot::Occupied(obj) => Some(obj),
-            Slot::Vacant(_) => None,
+        self.slots.iter().filter_map(|slot| match slot.state {
+            SlotState::Occupied => Some(&slot.value),
+            SlotState::Vacant(_) => None,
         })
     }
 
     /// Iterate mutably over all active objects.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
-        self.slots.iter_mut().filter_map(|slot| match slot {
-            Slot::Occupied(obj) => Some(obj),
-            Slot::Vacant(_) => None,
+        self.slots.iter_mut().filter_map(|slot| match slot.state {
+            SlotState::Occupied => Some(&mut slot.value),
+            SlotState::Vacant(_) => None,
         })
     }
 
@@ -318,9 +352,9 @@ impl<T> Pool<T> {
         self.slots
             .iter()
             .enumerate()
-            .filter_map(|(idx, slot)| match slot {
-                Slot::Occupied(obj) => Some((PoolIndex(idx), obj)),
-                Slot::Vacant(_) => None,
+            .filter_map(|(idx, slot)| match slot.state {
+                SlotState::Occupied => Some((PoolIndex(idx), &slot.value)),
+                SlotState::Vacant(_) => None,
             })
     }
 
@@ -533,5 +567,26 @@ mod tests {
 
         pool.release(idx);
         assert!(!pool.is_active(idx));
+    }
+
+    #[test]
+    fn test_pool_acquire_with_reset_reuse() {
+        let mut pool: Pool<TestObject> = Pool::new();
+        let idx1 = pool.acquire(|| TestObject::new(10));
+        pool.release(idx1);
+
+        // Should reuse the slot and NOT call init
+        let idx2 = pool.acquire_with_reset(
+            || panic!("Should not call init when reusing!"),
+            |obj| {
+                // Verify the old value is still there (memory persisted)
+                assert_eq!(obj.value, 10);
+                obj.value = 20;
+            },
+        );
+
+        // Index should be reused (LIFO)
+        assert_eq!(idx1, idx2);
+        assert_eq!(pool.get(idx2).unwrap().value, 20);
     }
 }
