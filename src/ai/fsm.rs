@@ -213,6 +213,8 @@ pub struct AiContext {
     pub target_distance: f32,
     /// Time spent in current state
     pub state_time: f32,
+    /// Whether an attack was performed this frame (for verification)
+    pub attack_performed: bool,
 }
 
 /// Idle state - waiting for something to happen.
@@ -327,10 +329,27 @@ impl State<AiContext> for ChaseState {
 }
 
 /// Attack state - attacking the target.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AttackState {
-    /// Attack cooldown timer
+    /// Time remaining before next attack
     pub cooldown: f32,
+    /// Time between attacks
+    pub attack_rate: f32,
+}
+
+impl AttackState {
+    pub fn new(attack_rate: f32) -> Self {
+        Self {
+            cooldown: 0.0,
+            attack_rate,
+        }
+    }
+}
+
+impl Default for AttackState {
+    fn default() -> Self {
+        Self::new(1.0)
+    }
 }
 
 impl State<AiContext> for AttackState {
@@ -340,6 +359,7 @@ impl State<AiContext> for AttackState {
 
     fn update(&mut self, ctx: &mut AiContext) -> Transition<AiContext> {
         self.cooldown -= ctx.delta_time;
+        ctx.attack_performed = false;
 
         // Return to chase if target moved away
         if ctx.target_distance > 3.0 {
@@ -349,6 +369,13 @@ impl State<AiContext> for AttackState {
         // Return to idle if target lost
         if !ctx.can_see_target {
             return Transition::to(IdleState::new(1.0));
+        }
+
+        // Perform attack if cooldown ready
+        if self.cooldown <= 0.0 {
+            ctx.attack_performed = true;
+            // Reset cooldown
+            self.cooldown = self.attack_rate;
         }
 
         Transition::None
@@ -471,5 +498,36 @@ mod tests {
 
         // Should return to Chase
         assert_eq!(fsm.current_state_name(), "Chase");
+    }
+
+    #[test]
+    fn test_attack_cooldown() {
+        // Attack logic: attacks immediately if cooldown <= 0, then resets to attack_rate
+        let mut fsm = StateMachine::new(AttackState::new(1.0));
+        let mut ctx = AiContext {
+            can_see_target: true,
+            target_distance: 1.0,
+            delta_time: 0.1,
+            ..Default::default()
+        };
+
+        // First update: should attack immediately (initial cooldown is 0)
+        fsm.update(&mut ctx);
+        assert!(
+            ctx.attack_performed,
+            "Should attack immediately on first update"
+        );
+
+        // Second update: cooldown should be ~0.9, no attack
+        fsm.update(&mut ctx);
+        assert!(
+            !ctx.attack_performed,
+            "Should not attack while cooldown is active"
+        );
+
+        // Fast forward 1.0s
+        ctx.delta_time = 1.0;
+        fsm.update(&mut ctx);
+        assert!(ctx.attack_performed, "Should attack after cooldown expires");
     }
 }
