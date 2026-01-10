@@ -1,3 +1,5 @@
+DEPRECATED - NOT IN DEVELOPMENT ANYMORE
+
 # Engine
 
 A 3D game engine written in Rust.
